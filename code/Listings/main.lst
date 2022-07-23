@@ -1,0 +1,610 @@
+A51 MACRO ASSEMBLER  MAIN                                                                 06/10/2022 17:31:06 PAGE     1
+
+
+MACRO ASSEMBLER A51 V8.2.7.0
+OBJECT MODULE PLACED IN .\Objects\main.obj
+ASSEMBLER INVOKED BY: C:\Keil_v5\C51\BIN\A51.EXE main.asm SET(SMALL) DEBUG PRINT(.\Listings\main.lst) OBJECT(.\Objects\m
+                      ain.obj) EP
+
+LOC  OBJ            LINE     SOURCE
+
+                       1     ;------------------------------------------------------------------------------------------
+                             ---------#!
+                       2     ;---------------------------------{{Tran Minh Nhat}}---------------------------------------
+                             -----#!
+                       3     ;-----------------------{{Project: Digital Frequency Meter}}-------------------------------
+                             -----#!
+                       4     ;---------------------------{{System: 8051 microcontroller}}-------------------------------
+                             ---------#!
+                       5     ;------------------------------{{Released at: 9/6/2022}}-----------------------------------
+                             --------#!
+                       6     ;------------------------------------------------------------------------------------------
+                             ---------#!
+                       7     ;khai bao ket noi phan cung;
+  00A7                 8                 EN         BIT   P2.7        ;#!chan P2.7 la EN cua LCD
+  00A5                 9                 RS         BIT   P2.5        ;#!chan P2.5 la RS cua LCD
+  0090                10                 LCD        EQU   P1          ;#!khai bao port du lieu LCD
+  0030                11                 F          EQU   30H         ;#!khai bao bien tan so F
+  0031                12                 T_ON_1     EQU   31H         ;#!chua du lieu thoi gian muc cao 
+  0032                13                 T_ON_2     EQU   32H
+  0033                14                 T_ON_3     EQU   33H
+  0050                15                 R8_        EQU   50H         ;#!thanh ghi tao them cho phep tinh
+  0051                16                 R9_        EQU   51H         ;#!thanh ghi tao them cho phep tinh
+  0052                17                 R10_       EQU   52H         ;#!thanh ghi tao them cho phep tinh
+  0053                18                 COUNT      EQU   53H         ;#!bien dem de tinh tan so
+                      19     ;------------------------------------------------------------------------------------------
+                             ---------#!
+                      20     ;-------------------------------------------------------------#!
+                      21     ;                       ~ CHUONG TRINH MAIN  ~
+                      22     ;-------------------------------------------------------------#!
+                      23     ;1.Su dung ngat ngoai 0 de dem tan so va ngat timer 1 mode 1 (16bit) de tinh time_on,
+                      24     ;
+                      25     ;2.Bo dem se reset sau moi 1 giay dung timer 0, mode 1, timer 16 bit 
+                      26     ;
+                      27     ;3.Hien thi thong bao len man hinh LCD
+                      28     ;
+                      29     ;------------------------------------------------------------#!
+0000                  30                 ORG   0000H                   
+0000 0130             31                 AJMP MAIN 
+0003                  32                 ORG   0003H                   ;#!vector ngat ngoai 0
+0003 0140             33                 AJMP  EX0_ISR
+001B                  34                 ORG   001BH                   ;#!vector ngat timer 1
+001B 0143             35                 AJMP  ET1_ISR 
+                      36                 
+0030                  37                 ORG   0030H 
+0030 1146             38     MAIN:       ACALL LCD_INIT                ;#!khoi tao man hinh LCD 
+0032 1151             39     AGAIN:      ACALL CALCULATE_HZ            ;#!tinh tan so
+0034 11CB             40                 ACALL HEXtoBCD                ;#!chuyen doi so hex sang BCD de hien thi
+0036 31E2             41                 ACALL LCD_DISPLAY             ;#!hien thi tan so ra man hinh LCD
+                      42                 ;
+0038 119C             43                 ACALL CALCULATE_DUTY_CYCLE    ;#!tinh chu ki nhiem vu duty cycle
+003A 11E1             44                 ACALL HEX32TOBCD              ;#!chuyen doi so hex 32 bit sang BCD hien thi
+003C 5106             45                 ACALL LCD_DISPLAY_DUTY_CYCLE  ;#!hien thi duty cycle ra man hinh LCD
+003E 0132             46                 AJMP  AGAIN                   ;#!lap vong tro lai
+                      47     ;---------------------------------------
+0040                  48     EX0_ISR:
+0040 0553             49                 INC   COUNT
+0042 32               50                 RETI 
+A51 MACRO ASSEMBLER  MAIN                                                                 06/10/2022 17:31:06 PAGE     2
+
+0043                  51     ET1_ISR:
+0043 0533             52                 INC   T_ON_3
+0045 32               53                 RETI
+                      54     
+                      55     ;-------------------------------------------------------------#!
+                      56     ;                       ~ chuong trinh con LCD_INIT ~
+                      57     ;-------------------------------------------------------------#!
+                      58                     ;khoi tao LCD 16x2 
+                      59                     ;gui cac ma code LCD de khoi tao 38H,0CH,01H,06H,8BH
+                      60                     ;dung phuong phap tra bang 
+                      61     ;-------------------------------------------------------------#!
+0046                  62     LCD_INIT:
+0046 900265           63                 MOV   DPTR, #CODE_INIT              ;#!dat dia chi tra bang
+0049 E4               64     LOOP1:      CLR   A                             ;#!xoa co ACC cho lenh tiep theo
+004A 93               65                 MOVC  A, @A+DPTR                    ;#!tra bang 
+004B 514A             66                 ACALL LCD_CMD                       ;#!goi chuong trinh con ghi lenh ra LCD
+004D A3               67                 INC   DPTR                          ;#!tang gia tri DPTR  <DPTR = DPTR + 1>
+004E 70F9             68                 JNZ   LOOP1                         ;#!nhay vong lai neu ACC khac 0
+                      69     
+                      70                 
+0050 22               71                 RET 
+                      72                                                                                             ;#!
+                             return if zero to MAIN routine
+                      73     ;-------------------------------------------------------------------#!
+                      74     ;                       ~ chuong trinh con CALCULATE_HZ ~
+                      75     ;-------------------------------------------------------------------#!
+                      76                     ;tinh so chu ki trong 1 giay
+                      77                     ;
+                      78                     ;dung timer 0 delay 1 giay
+                      79                     ;cho timer0 chay 16 vong voi gia tri 62500
+                      80                     ; 16 x 62500 = 1 000 000 uSec = 1 Sec
+                      81                     ;
+                      82                     ;dem so chu ki dung bien COUNT
+                      83     ;---------------------------------------------------------------------#!
+                      84     
+0051                  85     CALCULATE_HZ: 
+0051 758911           86                 MOV   TMOD, #00010001B        ;#!timer 1 & 0 mode 1 (16bit)
+0054 D2AF             87                 SETB  EA                      ;#!cho phep ngat toan cuc
+0056 D288             88                 SETB  IT0                     ;#!bat canh xuong cua /INT0
+                      89                 ;
+0058 758B00           90                 MOV   TL1, #00H               ;#!khoi tao cac gia tri bien tinh
+005B 758D00           91                 MOV   TH1, #00H 
+005E 753100           92                 MOV   T_ON_1, #00H
+0061 753200           93                 MOV   T_ON_2, #00H
+0064 753300           94                 MOV   T_ON_3, #00H
+0067 755300           95                 MOV   COUNT, #00H
+                      96     
+                      97                 ;#!tinh thoi gian muc 1 (5V)
+                      98     
+006A 20B2FD           99                 JB    P3.2, $
+006D 30B2FD          100                 JNB   P3.2, $                 ;#!cho canh len
+0070 D28E            101                 SETB  TR1                     ;#!cho timer1 chay de do thoi gian time_on
+0072 D2AB            102                 SETB  ET1                     ;#!cho phep ngat timer1
+0074 20B2FD          103                 JB    P3.2, $                 ;#!doi muc 1
+0077 C28E            104                 CLR   TR1                     ;#!sau khi muc 1 ketthuc thi dung timer1
+0079 858B31          105                 MOV   T_ON_1, TL1             ;#!tra ve gia tri dem duoc vao T_ON_1 va T_ON_2
+007C 858D32          106                 MOV   T_ON_2, TH1 
+007F C2AB            107                 CLR   ET1                     ;#!cam ngat timer1
+                     108     
+                     109                 ;#!do tan so
+                     110     
+0081 D2A8            111                 SETB  EX0                     ;#!cho phep ngat ngoai 0     
+0083 7F0E            112                 MOV   R7, #14                 ;#!delay 1 Sec
+0085 758ADC          113     BACK:       MOV   TL0, #LOW(-62500)
+0088 758C0B          114                 MOV   TH0, #HIGH(-62500)
+008B D28C            115                 SETB  TR0         
+A51 MACRO ASSEMBLER  MAIN                                                                 06/10/2022 17:31:06 PAGE     3
+
+008D 308DFD          116                 JNB TF0, $      
+0090 C28C            117                 CLR TR0                     ;#!dung timer
+0092 C28D            118                  CLR        TF0                     ;#!xoa co bao tran TF0
+0094 DFEF            119                  DJNZ  R7, BACK    
+0096 855330          120                 MOV   F, COUNT                ;#!tra gia tri tan so ve F
+0099 C2A8            121                 CLR   EX0                     ;#!cam ngat ngoai 0
+009B 22              122                 RET                           
+                     123     
+                     124     
+                     125     ;-------------------------------------------------------------------#!
+                     126     ;                       ~ chuong trinh con CALCULATE_DUTY_CYCLE ~
+                     127     ;-------------------------------------------------------------------#!
+                     128                     ;tinh chu ki nhiem vu
+                     129                     ;do thoi gian time_on trong mot chu ki
+                     130                     ;DC = time_on x tanso
+                     131     ;---------------------------------------------------------------------#!
+009C                 132     CALCULATE_DUTY_CYCLE:
+                     133                 ;#! thuc hien phep nhan time_on voi tanso
+                     134     
+009C 7840            135                 MOV R0, #40H            ;#!dia chi dau luu ket qua
+009E A931            136                 MOV R1, T_ON_1          ;#!gan 
+00A0 AA32            137                 MOV R2, T_ON_2
+00A2 AB33            138                 MOV R3, T_ON_3
+00A4 AC30            139                 MOV R4, F 
+00A6 EC              140                 MOV A, R4   
+00A7 F5F0            141                 MOV B, A 
+00A9 E9              142                 MOV A, R1 
+00AA A4              143                 MUL AB      
+00AB F6              144                 MOV @R0, A 
+00AC 08              145                 INC R0 
+00AD E5F0            146                 MOV A, B 
+00AF FD              147                 MOV R5, A 
+00B0 E530            148                 MOV A, F  
+00B2 F5F0            149                 MOV B, A 
+00B4 EA              150                 MOV A, R2 
+00B5 A4              151                 MUL AB 
+00B6 2D              152                 ADD A, R5 
+00B7 F6              153                 MOV @R0, A 
+00B8 08              154                 INC R0 
+00B9 E5F0            155                 MOV A, B 
+00BB FD              156                 MOV R5, A 
+00BC E530            157                 MOV A, F 
+00BE F5F0            158                 MOV B, A 
+00C0 EB              159                 MOV A, R3 
+00C1 A4              160                 MUL AB 
+00C2 2D              161                 ADD A, R5 
+00C3 F6              162                 MOV @R0, A 
+00C4 E5F0            163                 MOV A, B 
+00C6 3400            164                 ADDC A, #00H 
+00C8 08              165                 INC R0 
+00C9 F6              166                 MOV @R0, A 
+00CA 22              167                 RET 
+                     168     ;-------------------------------------------------------------#!
+                     169     ;                       ~ chuong trinh con HEXtoBCD ~
+                     170     ;-------------------------------------------------------------#!
+                     171            ;chuyen so HEX 8 bit sang ASCII 7 digits
+                     172            ;ngo vao data byte = F 
+                     173            ;ngo ra hang tram = R3
+                     174            ;ngo ra hang chuc = R2
+                     175            ;ngo ra hang don vi = R1
+                     176     ;--------------------------------------------------------------#!
+                     177     
+00CB                 178     HEXtoBCD:
+00CB 7900            179                 MOV         R1,#00H                 ;#!don vi
+00CD 7A00            180                 MOV         R2,#00H                 ;#!chuc
+00CF 7B00            181                 MOV         R3,#00H                 ;#!tram 
+A51 MACRO ASSEMBLER  MAIN                                                                 06/10/2022 17:31:06 PAGE     4
+
+                     182                 ;   
+00D1 75F00A          183                 MOV   B, #10 
+00D4 E530            184                 MOV   A, F
+00D6 84              185                 DIV   AB 
+00D7 A9F0            186                 MOV   R1, B 
+                     187                 ;
+00D9 75F00A          188                 MOV   B, #10 
+00DC 84              189                 DIV   AB 
+00DD AAF0            190                 MOV   R2, B
+00DF FB              191                 MOV   R3, A 
+00E0 22              192                 RET 
+                     193     ;-------------------------------------------------------------------------#!
+                     194     ;                       ~ chuong trinh con HEX32TOBCD ~
+                     195     ;-------------------------------------------------------------#!
+                     196            ;chuyen so hex 32 bit sang ASCII 7 digits
+                     197            ;input Data byte 3 = (43H)
+                     198            ;input Data byte 2 = (42H)
+                     199            ;input Data byte 1 = (41H)
+                     200              ;input Data byte 0 = (40H)
+                     201           
+                     202     ;------------------------------------------------------------#!
+00E1                 203     HEX32TOBCD:
+00E1 7900            204                 MOV R1, #00H            ;#!khoi tao gia tri ban dau cho cac bien
+00E3 7A00            205                 MOV R2, #00H 
+00E5 7B00            206                 MOV R3, #00H 
+00E7 7C00            207                 MOV R4, #00H 
+00E9 7D00            208                 MOV R5, #00H 
+00EB 7E00            209                 MOV R6, #00H 
+00ED 7F00            210                 MOV R7, #00H 
+00EF 755000          211                 MOV R8_, #00H 
+00F2 755100          212                 MOV R9_, #00H 
+00F5 755200          213                 MOV R10_, #00H
+                     214                 ;
+00F8 75F00A          215                 MOV B, #10 
+00FB E540            216                 MOV A, 40H 
+00FD 84              217                 DIV AB 
+00FE A9F0            218                 MOV R1, B 
+                     219                 ;
+0100 75F00A          220                 MOV B, #10 
+0103 84              221                 DIV AB 
+0104 AAF0            222                 MOV R2, B 
+0106 FB              223                 MOV R3, A 
+                     224                 ;
+0107 E541            225                 MOV A, 41H 
+0109 B4000B          226                 CJNE A, #0H, NEXT1_
+010C E542            227                 MOV A, 42H 
+010E B40034          228                 CJNE A, #0H, NEXT2_
+0111 E543            229                 MOV A, 43H 
+0113 B4006F          230                 CJNE A, #0H, NEXT3_
+0116 22              231                 RET 
+                     232                 ;
+0117                 233     NEXT1_:                            ;#!cong 256 tuong ung vao R1, R2, R3
+0117 7406            234                 MOV A, #6
+0119 29              235                 ADD A, R1 
+011A 75F00A          236                 MOV B, #10 
+011D 84              237                 DIV AB 
+011E A9F0            238                 MOV R1, B 
+                     239                 ;
+0120 2405            240                 ADD A, #5
+0122 2A              241                 ADD A, R2 
+0123 75F00A          242                 MOV B, #10 
+0126 84              243                 DIV AB 
+0127 AAF0            244                 MOV R2, B 
+                     245                 ;
+0129 2402            246                 ADD A, #2 
+012B 2B              247                 ADD A, R3 
+A51 MACRO ASSEMBLER  MAIN                                                                 06/10/2022 17:31:06 PAGE     5
+
+012C 75F00A          248                 MOV B, #10 
+012F 84              249                 DIV AB 
+0130 ABF0            250                 MOV R3, B
+                     251                 ;
+0132 2C              252                 ADD A, R4 
+0133 FC              253                 MOV R4, A 
+0134 D541E0          254                 DJNZ 41H, NEXT1_
+0137 75F00A          255                 MOV B, #10 
+013A EC              256                 MOV A, R4 
+013B 84              257                 DIV AB 
+013C ACF0            258                 MOV R4, B
+                     259                 ; 
+013E FD              260                 MOV R5, A
+013F 7442            261                 MOV A, #42H 
+0141 B40001          262                 CJNE A, #0H, NEXT2_
+0144 22              263                 RET 
+                     264                 ;
+0145                 265     NEXT2_:                             ;#!cong 65536 tuong ung vao R1, R2, R3, R4, R5
+0145 7406            266                 MOV A, #6 
+0147 29              267                 ADD A, R1 
+0148 75F00A          268                 MOV B, #10 
+014B 84              269                 DIV AB 
+014C A9F0            270                 MOV R1, B 
+                     271                 ;
+014E 2403            272                 ADD A, #3
+0150 2A              273                 ADD A, R2 
+0151 75F00A          274                 MOV B, #10 
+0154 84              275                 DIV AB 
+0155 AAF0            276                 MOV R2, B 
+                     277                 ;
+0157 2405            278                 ADD A, #5 
+0159 2B              279                 ADD A, R3 
+015A 75F00A          280                 MOV B, #10 
+015D 84              281                 DIV AB 
+015E ABF0            282                 MOV R3, B 
+                     283                 ;
+0160 2405            284                 ADD A, #5 
+0162 2C              285                 ADD A, R4 
+0163 75F00A          286                 MOV B, #10
+0166 84              287                 DIV AB 
+0167 ACF0            288                 MOV R4, B 
+                     289                 ;
+0169 2406            290                 ADD A, #6 
+016B 2D              291                 ADD A, R5 
+016C 75F00A          292                 MOV B, #10 
+016F 84              293                 DIV AB 
+0170 ADF0            294                 MOV R5, B 
+                     295                 ;
+0172 2E              296                 ADD A, R6 
+0173 FE              297                 MOV R6, A 
+0174 D542CE          298                 DJNZ 42H, NEXT2_
+0177 75F00A          299                 MOV B, #10 
+017A EE              300                 MOV A, R6 
+017B 84              301                 DIV AB 
+017C AEF0            302                 MOV R6, B 
+017E FF              303                 MOV R7, A 
+                     304                 ;
+017F E543            305                 MOV A, 43H
+0181 B40001          306                 CJNE A, #0H, NEXT3_
+0184 22              307                 RET 
+                     308                 ;
+0185                 309     NEXT3_:                              ;#!cong 16777216 tuong ung vao R1, R2, R3, R4, R5, R6,
+                              R7, R8
+0185 7406            310                 MOV A, #6 
+0187 29              311                 ADD A, R1 
+0188 75F00A          312                 MOV B, #10 
+A51 MACRO ASSEMBLER  MAIN                                                                 06/10/2022 17:31:06 PAGE     6
+
+018B 84              313                 DIV AB 
+018C A9F0            314                 MOV R1, B 
+                     315                 ;
+018E 2401            316                 ADD A, #1 
+0190 2A              317                 ADD A, R2 
+0191 75F00A          318                 MOV B, #10 
+0194 84              319                 DIV AB 
+0195 AAF0            320                 MOV R2, B 
+                     321                 ;
+0197 2402            322                 ADD A, #2 
+0199 2B              323                 ADD A, R3 
+019A 75F00A          324                 MOV B, #10 
+019D 84              325                 DIV AB 
+019E ABF0            326                 MOV R3, B 
+                     327                 ;
+01A0 2407            328                 ADD A, #7
+01A2 2C              329                 ADD A, R4 
+01A3 75F00A          330                 MOV B, #10 
+01A6 84              331                 DIV AB 
+01A7 ACF0            332                 MOV R4, B 
+                     333                 ;
+01A9 2407            334                 ADD A, #7 
+01AB 2D              335                 ADD A, R5 
+01AC 75F00A          336                 MOV B, #10 
+01AF 84              337                 DIV AB 
+01B0 ADF0            338                 MOV R5, B 
+                     339                 ;
+01B2 2407            340                 ADD A, #7 
+01B4 2E              341                 ADD A, R6 
+01B5 75F00A          342                 MOV B, #10 
+01B8 84              343                 DIV AB 
+01B9 AEF0            344                 MOV R6, B 
+                     345                 ;
+01BB 2406            346                 ADD A, #6 
+01BD 2F              347                 ADD A, R7 
+01BE 75F00A          348                 MOV B, #10 
+01C1 84              349                 DIV AB 
+01C2 AFF0            350                 MOV R7, B 
+                     351                 ;
+01C4 2401            352                 ADD A, #1 
+01C6 2550            353                 ADD A, R8_ 
+01C8 75F00A          354                 MOV B, #10 
+01CB 84              355                 DIV AB 
+01CC 85F050          356                 MOV R8_, B 
+                     357                 ;
+01CF 2551            358                 ADD A, R9_ 
+01D1 F551            359                 MOV R9_, A 
+01D3 D543AF          360                 DJNZ 43H, NEXT3_
+01D6 75F00A          361                 MOV B, #10 
+01D9 E551            362                 MOV A, R9_
+01DB 84              363                 DIV AB 
+01DC 85F051          364                 MOV R9_, B 
+01DF F552            365                 MOV R10_, A 
+01E1 22              366                 RET 
+                     367     
+                     368     ;-------------------------------------------------------------#!
+                     369     ;                       ~ chuong trinh con LCD_DISPLAY ~
+                     370     ;-------------------------------------------------------------#!
+                     371     ;               ;In du lieu tan so ra man hinh LCD
+                     372     ;-------------------------------------------------------------#!
+01E2                 373     LCD_DISPLAY:
+01E2 7482            374                 MOV A, #82H       
+01E4 514A            375                 ACALL LCD_CMD     
+                     376                 ;
+01E6 7446            377                 MOV A, #"F"
+01E8 5155            378                 ACALL LCD_DATA 
+A51 MACRO ASSEMBLER  MAIN                                                                 06/10/2022 17:31:06 PAGE     7
+
+                     379                 ;
+01EA 743D            380                 MOV A, #"="
+01EC 5155            381                 ACALL LCD_DATA  
+                     382                 ;
+01EE EB              383                 MOV A, R3 
+01EF 2430            384                 ADD A, #30H 
+01F1 5155            385                 ACALL LCD_DATA
+                     386                 ;
+01F3 EA              387                 MOV A, R2 
+01F4 2430            388                 ADD A, #30H 
+01F6 5155            389                 ACALL LCD_DATA
+                     390                 ;
+01F8 E9              391                 MOV A, R1
+01F9 2430            392                 ADD A, #30H 
+01FB 5155            393                 ACALL LCD_DATA
+                     394                 ;
+01FD 7448            395                 MOV A, #"H"
+01FF 5155            396                 ACALL LCD_DATA
+0201 747A            397                 MOV A, #"z"
+0203 5155            398                 ACALL LCD_DATA
+0205 22              399                 RET         
+                     400     ;-------------------------------------------------------------#!
+                     401     ;           ~ chuong trinh con LCD_DISPLAY_DUTY_CYCLE ~
+                     402     ;-------------------------------------------------------------#!
+                     403     ;                   ;In du lieu duty cycle ra man hinh LCD
+                     404     ;-------------------------------------------------------------#!
+0206                 405     LCD_DISPLAY_DUTY_CYCLE:
+0206 74C2            406                 MOV A, #0C2H
+0208 514A            407                 ACALL LCD_CMD
+                     408                 ;
+020A 7444            409                 MOV A, #"D"
+020C 5155            410                 ACALL LCD_DATA 
+                     411                 ;
+020E 7443            412                 MOV A, #"C"
+0210 5155            413                 ACALL LCD_DATA
+                     414                 ;
+0212 743D            415                 MOV A, #"="
+0214 5155            416                 ACALL LCD_DATA  
+                     417                 ;
+0216 E552            418                  MOV A, R10_
+0218 2430            419                 ADD A, #30H 
+021A 5155            420                 ACALL LCD_DATA
+                     421                 ;
+021C E551            422                  MOV A, R9_
+021E 2430            423                 ADD A, #30H 
+0220 5155            424                 ACALL LCD_DATA
+                     425                 ;
+0222 E550            426                 MOV A, R8_
+0224 2430            427                 ADD A, #30H 
+0226 5155            428                 ACALL LCD_DATA
+                     429                 ;
+0228 EF              430                 MOV A, R7
+0229 2430            431                 ADD A, #30H 
+022B 5155            432                 ACALL LCD_DATA
+                     433                 ;
+022D EE              434                 MOV A, R6
+022E 2430            435                 ADD A, #30H 
+0230 5155            436                 ACALL LCD_DATA
+                     437                 ;
+0232 ED              438                 MOV A, R5
+0233 2430            439                 ADD A, #30H 
+0235 5155            440                 ACALL LCD_DATA
+                     441                 ;
+0237 742E            442                 MOV A, #"."
+0239 5155            443                 ACALL LCD_DATA 
+                     444                 ;
+A51 MACRO ASSEMBLER  MAIN                                                                 06/10/2022 17:31:06 PAGE     8
+
+023B EC              445                 MOV A, R4
+023C 2430            446                 ADD A, #30H 
+023E 5155            447                 ACALL LCD_DATA
+                     448                 ;
+0240 EB              449                 MOV A, R3
+0241 2430            450                 ADD A, #30H 
+0243 5155            451                 ACALL LCD_DATA
+                     452                 ;
+                     453           
+0245 7425            454                 MOV A, #"%"
+0247 5155            455                 ACALL LCD_DATA
+                     456     
+0249 22              457                 RET 
+                     458     ;-------------------------------------------------------------#!
+                     459     ;                       ~ chuong trinh con LCD_CMD ~
+                     460     ;-------------------------------------------------------------#!
+                     461     ;               ;De gui lenh dieu khien ra cac port LCD
+                     462     ;-------------------------------------------------------------#!
+024A                 463     LCD_CMD:
+024A F590            464                 MOV         LCD, A                                                  ;#!gui noi 
+                             dung code sang P1
+024C C2A5            465                  CLR        RS                                                              ;#!
+                             RS=0 vao mode command
+024E D2A7            466                  SETB       EN                                                              ;#!
+                             E=1 tao xung len
+0250 5160            467                  ACALL DELAY                                                        ;#!delay
+0252 C2A7            468                  CLR        EN                                                              ;#!
+                             E=0 de tao canh xuong 
+0254 22              469                  RET        
+                     470     
+                     471     ;-------------------------------------------------------------#!
+                     472     ;                       ~ chuong trinh con LCD_DATA ~
+                     473     ;-------------------------------------------------------------#!
+                     474     ;               ;De gui noi dung hien thi ra cac port LCD
+                     475     ;-------------------------------------------------------------#!
+0255                 476     LCD_DATA:                                                                       
+0255 F590            477                   MOV       LCD, A                                                  ;#!gui du l
+                             ieu sang P1
+0257 D2A5            478                   SETB      RS                                                              ;#!
+                             RS=1 vao mode data
+0259 D2A7            479                   SETB      EN                                                              ;#!
+                             E=1 tao xung len
+025B 5160            480                   ACALL DELAY                                                       ;#!delay
+025D C2A7            481                   CLR       EN                                                              ;#!
+                             E=0 de tao canh xuong 
+025F 22              482                   RET       
+                     483     ;-------------------------------------------------------------#!
+                     484     ;                       ~ chuong trinh con  DELAY ~
+                     485     ;-------------------------------------------------------------#!
+                     486     ;               
+                     487     ;-------------------------------------------------------------#!
+0260                 488      DELAY:                                                                                 
+0260 78FF            489                   MOV       R0,#255                                                 
+0262 D8FE            490                   DJNZ      R0,$                                                    
+0264 22              491                   RET
+                     492     ;------------------------------------------------------------------------------------------
+                             ---------#!
+                     493     ;------------------------------------------------------------------------------------------
+                             ---------#!
+0265 380C0106        494     CODE_INIT:   DB    38H,0CH,01H,06H,8BH,0                        ;#!Look-up table for LCD in
+                             itialization commands 
+0269 8B00                    
+                     495                   END       
+                             
+                             
+                             
+A51 MACRO ASSEMBLER  MAIN                                                                 06/10/2022 17:31:06 PAGE     9
+
+                             
+                             
+                             
+                             
+A51 MACRO ASSEMBLER  MAIN                                                                 06/10/2022 17:31:06 PAGE    10
+
+SYMBOL TABLE LISTING
+------ ----- -------
+
+
+N A M E                 T Y P E  V A L U E   ATTRIBUTES
+
+AGAIN. . . . . . . . .  C ADDR   0032H   A   
+B. . . . . . . . . . .  D ADDR   00F0H   A   
+BACK . . . . . . . . .  C ADDR   0085H   A   
+CALCULATE_DUTY_CYCLE .  C ADDR   009CH   A   
+CALCULATE_HZ . . . . .  C ADDR   0051H   A   
+CODE_INIT. . . . . . .  C ADDR   0265H   A   
+COUNT. . . . . . . . .  N NUMB   0053H   A   
+DELAY. . . . . . . . .  C ADDR   0260H   A   
+EA . . . . . . . . . .  B ADDR   00A8H.7 A   
+EN . . . . . . . . . .  B ADDR   00A0H.7 A   
+ET1. . . . . . . . . .  B ADDR   00A8H.3 A   
+ET1_ISR. . . . . . . .  C ADDR   0043H   A   
+EX0. . . . . . . . . .  B ADDR   00A8H.0 A   
+EX0_ISR. . . . . . . .  C ADDR   0040H   A   
+F. . . . . . . . . . .  N NUMB   0030H   A   
+HEX32TOBCD . . . . . .  C ADDR   00E1H   A   
+HEXTOBCD . . . . . . .  C ADDR   00CBH   A   
+IT0. . . . . . . . . .  B ADDR   0088H.0 A   
+LCD. . . . . . . . . .  D ADDR   0090H   A   
+LCD_CMD. . . . . . . .  C ADDR   024AH   A   
+LCD_DATA . . . . . . .  C ADDR   0255H   A   
+LCD_DISPLAY. . . . . .  C ADDR   01E2H   A   
+LCD_DISPLAY_DUTY_CYCLE  C ADDR   0206H   A   
+LCD_INIT . . . . . . .  C ADDR   0046H   A   
+LOOP1. . . . . . . . .  C ADDR   0049H   A   
+MAIN . . . . . . . . .  C ADDR   0030H   A   
+NEXT1_ . . . . . . . .  C ADDR   0117H   A   
+NEXT2_ . . . . . . . .  C ADDR   0145H   A   
+NEXT3_ . . . . . . . .  C ADDR   0185H   A   
+P1 . . . . . . . . . .  D ADDR   0090H   A   
+P2 . . . . . . . . . .  D ADDR   00A0H   A   
+P3 . . . . . . . . . .  D ADDR   00B0H   A   
+R10_ . . . . . . . . .  N NUMB   0052H   A   
+R8_. . . . . . . . . .  N NUMB   0050H   A   
+R9_. . . . . . . . . .  N NUMB   0051H   A   
+RS . . . . . . . . . .  B ADDR   00A0H.5 A   
+TF0. . . . . . . . . .  B ADDR   0088H.5 A   
+TH0. . . . . . . . . .  D ADDR   008CH   A   
+TH1. . . . . . . . . .  D ADDR   008DH   A   
+TL0. . . . . . . . . .  D ADDR   008AH   A   
+TL1. . . . . . . . . .  D ADDR   008BH   A   
+TMOD . . . . . . . . .  D ADDR   0089H   A   
+TR0. . . . . . . . . .  B ADDR   0088H.4 A   
+TR1. . . . . . . . . .  B ADDR   0088H.6 A   
+T_ON_1 . . . . . . . .  N NUMB   0031H   A   
+T_ON_2 . . . . . . . .  N NUMB   0032H   A   
+T_ON_3 . . . . . . . .  N NUMB   0033H   A   
+
+
+REGISTER BANK(S) USED: 0 
+
+
+ASSEMBLY COMPLETE.  0 WARNING(S), 0 ERROR(S)

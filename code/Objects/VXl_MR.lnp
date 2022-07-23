@@ -1,0 +1,3 @@
+".\Objects\main.obj" 
+TO ".\Objects\VXl_MR" 
+PRINT(".\Listings\VXl_MR.m51") RAMSIZE(256) 
